@@ -34,7 +34,7 @@ h2 { font-size: 1.4rem; margin: 16px 0 4px; }
 h3 { font-size: 1.05rem; margin: 16px 0 8px; }
 h4 { font-size: 1rem; margin: 0; overflow-wrap: anywhere; }
 p { margin: 6px 0; }
-button, a, textarea { -webkit-tap-highlight-color: transparent; }
+button, a, textarea, select { -webkit-tap-highlight-color: transparent; }
 button, .menu a {
   font: inherit;
   min-height: 44px;
@@ -71,10 +71,13 @@ button:disabled { opacity: .5; cursor: default; }
 .prescription { font-size: .8rem; color: var(--secondary); overflow-wrap: anywhere; }
 .text-indicator { display: inline-block; font-size: .75rem; color: var(--secondary); }
 .exercise-content { padding: 4px 6px 6px; }
-.plan-notes summary { display: flex; align-items: center; min-height: 44px; font-size: .85rem; cursor: pointer; }
-.plan-notes summary::before { content: "+"; margin-right: 8px; }
-.plan-notes[open] summary::before { content: "−"; }
-.plan-notes p { font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field-label, .result-field label { font-size: .85rem; color: var(--secondary); }
+.plan-notes p, .previous-text { font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.previous-notes summary { min-height: 44px; padding: 10px 0; font-size: .85rem; cursor: pointer; }
+.previous-notes { margin-top: 6px; border-top: 1px solid var(--border); }
+.fatigue-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.fatigue-field label { font-size: .9rem; }
+.fatigue-field select { min-height: 44px; min-width: 80px; font: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); }
 .result-field label { display: block; font-size: .85rem; color: var(--secondary); margin: 6px 0 4px; }
 textarea { display: block; width: 100%; font: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--text); resize: vertical; }
 .phase-steps { display: flex; gap: 8px; margin: 10px 0; }

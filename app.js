@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import { validateBackup, validatePlanFile } from './data.js';
+import { validateBackup, validatePlanFile, fatigueCode } from './data.js';
 const $ = id => document.getElementById(id);
 const states = ['pending', 'completed', 'skipped'];
 const symbols = { pending: '□', completed: '✓', skipped: '×' };
@@ -7,7 +7,10 @@ const labels = { pending: 'da fare', completed: 'completato', skipped: 'saltato'
 let data, plan, session, sections = [], exercises = [], records = new Map();
 let sectionIndex = 0, undo = null, writing = 0, blocked = false, ready = false, closing = false;
 let writeQueue = Promise.resolve(), restoreData = null, preventiveDownloaded = false;
-const unsaved = new Map(), expanded = new Set(), expandedNotes = new Set();
+const unsaved = new Map(), unsavedFatigue = new Map(), viewStates = new Map();
+let expanded = new Set(), previousNotesOpen = new Set(), renderedKey = null, lastHistoryHash = '#history', pendingSessionId = null;
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+const hasUnsaved = () => unsaved.size > 0 || unsavedFatigue.size > 0;
 const view = () => location.hash.slice(1).split('/')[0] || 'plan';
 const editable = () => view() === 'session' && session?.status === 'in_progress';
 const sectionExercises = () => exercises.filter(e => e.sectionId === sections[sectionIndex]?.id);
@@ -15,11 +18,11 @@ const announce = text => { $('announcements').textContent = text; };
 function error(error) {
   $('error-panel').hidden = false;
   $('error-message').textContent = `${error.message || error} I dati già salvati restano sul dispositivo.`;
-  $('retry-save').hidden = !unsaved.size;
+  $('retry-save').hidden = !hasUnsaved() && !blocked;
 }
 function saveStatus() {
-  $('save-status').textContent = blocked || unsaved.size && !writing ? 'Modifiche da salvare' : writing ? 'Salvataggio…' : 'Dati salvati sul dispositivo';
-  $('retry-save').hidden = !unsaved.size || writing > 0;
+  $('save-status').textContent = blocked || hasUnsaved() && !writing ? 'Modifiche da salvare' : writing ? 'Salvataggio…' : 'Dati salvati sul dispositivo';
+  $('retry-save').hidden = (!hasUnsaved() && !blocked) || writing > 0;
 }
 function setMenu(open) {
   $('main-menu').hidden = !open;
@@ -40,20 +43,31 @@ function clearSaved(patches) {
     if (pending.status === undefined && pending.resultText === undefined) unsaved.delete(patch.exerciseId);
   }
 }
-function persist(patches) {
-  const sessionId = session.id;
+function persist(patches, sessionId = session.id) {
+  pendingSessionId = sessionId;
   for (const patch of patches) unsaved.set(patch.exerciseId, { ...unsaved.get(patch.exerciseId), ...patch });
+  return enqueueWrite(async () => { await db.updateRecords(sessionId, patches); clearSaved(patches); });
+}
+function persistFatigue(sectionId, value, sessionId = session.id) {
+  pendingSessionId = sessionId;
+  unsavedFatigue.set(sectionId, value);
+  return enqueueWrite(async () => {
+    await db.updateSectionFatigue(sessionId, sectionId, value);
+    if (unsavedFatigue.get(sectionId) === value) unsavedFatigue.delete(sectionId);
+  });
+}
+function enqueueWrite(work) {
   writing++; saveStatus();
   writeQueue = writeQueue.then(async () => {
     if (blocked) return;
-    try { await db.updateRecords(sessionId, patches); clearSaved(patches); }
+    try { await work(); }
     catch (failure) { blocked = true; error(failure); }
   }).finally(() => { writing--; saveStatus(); });
   return writeQueue;
 }
 async function flush() {
   await writeQueue;
-  if (unsaved.size || blocked) throw new Error('Ci sono modifiche non salvate. Premi «Riprova salvataggio» prima di continuare.');
+  if (hasUnsaved() || blocked) throw new Error('Ci sono modifiche non salvate. Premi «Riprova salvataggio» prima di continuare.');
 }
 async function action(work) {
   if (!ready || closing) return;
@@ -62,25 +76,30 @@ async function action(work) {
   catch (failure) { error(failure); }
   finally { closing = false; }
 }
+function rememberView() {
+  if (!renderedKey) return;
+  viewStates.set(renderedKey, { sectionId: sections[sectionIndex]?.id, expanded, previousNotesOpen, scrollY: window.scrollY });
+}
 async function refresh() {
   data = await db.readAll();
   const kind = view();
   session = kind === 'detail' ? data.sessions.find(s => s.id === location.hash.split('/')[1]) : data.sessions.find(s => s.status === 'in_progress');
   const planId = ['session', 'detail'].includes(kind) && session ? session.planId : data.settings.find(s => s.key === 'activePlanId')?.value;
-  const oldPlan = plan?.id;
   plan = data.plans.find(p => p.id === planId);
   sections = [...(plan?.sections || [])].sort((a, b) => a.order - b.order);
   exercises = data.exercises.filter(e => e.planId === plan?.id).sort((a, b) => a.order - b.order);
-  if (oldPlan !== plan?.id || sectionIndex >= sections.length) sectionIndex = 0;
-  if (kind === 'session' && session) {
-    const index = sections.findIndex(s => s.id === session.lastSectionId);
-    if (index >= 0) sectionIndex = index;
-  }
+  renderedKey = ['session', 'detail'].includes(kind) ? `${kind}/${session?.id}` : kind === 'plan' ? `plan/${plan?.id}` : kind;
+  const state = viewStates.get(renderedKey);
+  const sectionId = state?.sectionId ?? (kind === 'session' ? session?.lastSectionId : null);
+  sectionIndex = Math.max(0, sections.findIndex(s => s.id === sectionId));
+  expanded = state?.expanded ?? new Set(); previousNotesOpen = state?.previousNotesOpen ?? new Set();
+  if (kind === 'detail' && session) lastHistoryHash = `#detail/${session.id}`;
   records = new Map(exercises.map(e => {
     const record = data.records.find(r => r.sessionId === session?.id && r.exerciseId === e.id);
-    return [e.id, { status: 'pending', resultText: '', ...record, ...unsaved.get(e.id) }];
+    return [e.id, { status: 'pending', resultText: '', ...record, ...(editable() ? unsaved.get(e.id) : {}) }];
   }));
   render();
+  window.scrollTo({ top: state?.scrollY ?? 0, behavior: 'instant' });
 }
 function render() {
   const kind = view(), work = ['plan', 'session', 'detail'].includes(kind);
@@ -89,8 +108,10 @@ function render() {
   $('empty-view').hidden = !work || !!plan;
   $('history-view').hidden = kind !== 'history';
   $('manage-view').hidden = kind !== 'manage';
+  $('all-sessions').hidden = kind !== 'detail';
+  $('main-menu').querySelector('a[data-history]').href = lastHistoryHash;
   $('main-menu').querySelectorAll('a').forEach(link => {
-    if (link.hash === `#${kind === 'detail' ? 'history' : kind}`) link.setAttribute('aria-current', 'page');
+    if ((link.hasAttribute('data-history') && ['history', 'detail'].includes(kind)) || link.hash === `#${kind}`) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   if (kind === 'history') renderHistory();
@@ -122,6 +143,8 @@ function render() {
     button.append(count); $('phase-navigation').append(button);
   });
   $('exercises').replaceChildren();
+  const previousSessions = editable() ? data.sessions.filter(s => s.planId === session.planId && s.status === 'completed' && s.startedAt < session.startedAt)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id)) : [];
   for (const exercise of sectionExercises()) {
     const record = records.get(exercise.id), article = $('exercise-template').content.firstElementChild.cloneNode(true);
     const disclosure = article.querySelector('.expand-button'), body = article.querySelector('.exercise-content');
@@ -136,9 +159,18 @@ function render() {
     disclosure.setAttribute('aria-label', `${open ? 'Richiudi' : 'Espandi'} ${exercise.name}`);
     disclosure.firstElementChild.textContent = open ? '−' : '+';
     indicator.hidden = !showResults || !record.resultText.trim();
-    notes.hidden = !exercise.notes; notes.open = expandedNotes.has(exercise.id);
-    notes.querySelector('p').textContent = exercise.notes;
-    notes.addEventListener('toggle', () => { if (notes.isConnected) { if (notes.open) expandedNotes.add(exercise.id); else expandedNotes.delete(exercise.id); } });
+    notes.hidden = !exercise.notes;
+    notes.querySelector('p:last-child').textContent = exercise.notes;
+    const previous = article.querySelector('.previous-notes');
+    previous.hidden = !previousSessions.length;
+    previous.open = previousNotesOpen.has(exercise.id);
+    const source = previousSessions.map(s => ({ session: s, record: data.records.find(r => r.sessionId === s.id && r.exerciseId === exercise.id && r.resultText.trim()) })).find(item => item.record);
+    previous.querySelector('.previous-date').textContent = source ? `Ultime note · ${source.session.localDate}` : '';
+    previous.querySelector('.previous-text').textContent = source?.record.resultText ?? 'Nessuna nota precedente per questo esercizio con questa scheda.';
+    previous.addEventListener('toggle', () => {
+      if (!previous.isConnected) return;
+      if (previous.open) previousNotesOpen.add(exercise.id); else previousNotesOpen.delete(exercise.id);
+    });
     toggle.hidden = !showResults; toggle.disabled = !editable(); toggle.dataset.cycle = exercise.id;
     toggle.dataset.state = record.status; toggle.firstElementChild.textContent = symbols[record.status];
     toggle.setAttribute('aria-label', `${exercise.name}: ${labels[record.status]}${editable() ? `. Segna ${labels[states[(states.indexOf(record.status) + 1) % states.length]]}` : ''}`);
@@ -153,6 +185,14 @@ function render() {
   }
   const done = [...records.values()].filter(r => r.status === 'completed').length;
   const skipped = [...records.values()].filter(r => r.status === 'skipped').length;
+  const code = fatigueCode(phase);
+  $('fatigue-field').hidden = !showResults || !code;
+  $('fatigue-label').textContent = code ? `Stanchezza fine ${code.toLowerCase()}` : '';
+  const fatigue = editable() && unsavedFatigue.has(phase.id) ? unsavedFatigue.get(phase.id) : session?.sectionFatigue?.find(r => r.sectionId === phase.id)?.value;
+  $('section-fatigue').value = fatigue ?? '';
+  $('section-fatigue').hidden = !editable();
+  $('fatigue-value').hidden = editable();
+  $('fatigue-value').textContent = fatigue == null ? '—' : `${fatigue}/10`;
   $('session-progress').hidden = !showResults;
   $('session-progress').textContent = `${done} ✓ · ${skipped} × · ${exercises.length} esercizi`;
   $('complete-phase').textContent = `Completa fase ${phase.code || phase.title}`;
@@ -186,16 +226,27 @@ function selectPhase(index) {
   if (editable()) { const id = session.id, phaseId = sections[index].id; writeQueue = writeQueue.then(() => db.selectSection(id, phaseId)).catch(error); }
 }
 $('menu-button').addEventListener('click', () => setMenu($('main-menu').hidden));
+$('main-menu').querySelector('a[href="#history"]').setAttribute('data-history', '');
+$('all-sessions').addEventListener('click', () => {
+  lastHistoryHash = '#history'; location.hash = 'history';
+});
 $('main-menu').addEventListener('click', e => { if (e.target.closest('a')) setMenu(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { setMenu(false); $('menu-button').focus(); } });
 $('start-session').addEventListener('click', () => action(async () => {
-  session = await db.startSession(plan.id); undo = null; expanded.clear(); expandedNotes.clear();
+  session = await db.startSession(plan.id); undo = null;
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if (view() === 'session') await refresh(); else location.hash = 'session';
 }));
 $('phase-navigation').addEventListener('click', e => { const button = e.target.closest('[data-phase]'); if (button) selectPhase(Number(button.dataset.phase)); });
 $('previous-phase').addEventListener('click', () => selectPhase(sectionIndex - 1));
 $('next-phase').addEventListener('click', () => selectPhase(sectionIndex + 1));
+$('section-fatigue').addEventListener('change', () => {
+  if (!editable()) return;
+  const sectionId = sections[sectionIndex].id, value = $('section-fatigue').value === '' ? null : Number($('section-fatigue').value);
+  session.sectionFatigue = (session.sectionFatigue || []).filter(r => r.sectionId !== sectionId);
+  if (value !== null) session.sectionFatigue.push({ sectionId, value });
+  persistFatigue(sectionId, value);
+});
 $('exercises').addEventListener('click', e => {
   const disclosure = e.target.closest('[data-expand]');
   if (disclosure && !disclosure.disabled) {
@@ -222,8 +273,10 @@ $('undo-phase').addEventListener('click', () => {
 });
 $('retry-save').addEventListener('click', async () => {
   await writeQueue; blocked = false;
-  await persist([...unsaved.values()].map(p => ({ ...p })));
-  if (!blocked && !unsaved.size) $('error-panel').hidden = true;
+  if (unsaved.size) await persist([...unsaved.values()].map(p => ({ ...p })), pendingSessionId);
+  for (const [sectionId, value] of [...unsavedFatigue]) await persistFatigue(sectionId, value, pendingSessionId);
+  saveStatus();
+  if (!blocked && !hasUnsaved()) $('error-panel').hidden = true;
 });
 $('finish-session').addEventListener('click', () => {
   const remaining = [...records.values()].filter(r => r.status === 'pending').length;
@@ -264,14 +317,16 @@ $('preventive-backup').addEventListener('click', () => action(async () => {
 $('confirm-restore').addEventListener('click', () => action(async () => {
   if (!restoreData || !preventiveDownloaded) return;
   if (!confirm('Hai verificato che il backup attuale sia stato scaricato? Confermi la sostituzione di tutti i dati?')) return;
-  await db.restore(restoreData); restoreData = null; preventiveDownloaded = false; undo = null; expanded.clear();
+  await db.restore(restoreData); restoreData = null; preventiveDownloaded = false; undo = null;
+  viewStates.clear(); expanded.clear(); previousNotesOpen.clear(); renderedKey = null; lastHistoryHash = '#history';
   $('restore-panel').hidden = true; $('backup-file').value = ''; sectionIndex = 0; await refresh(); announce('Backup ripristinato.');
 }));
 $('cancel-restore').addEventListener('click', () => { restoreData = null; $('restore-panel').hidden = true; $('backup-file').value = ''; });
-window.addEventListener('beforeunload', e => { if (unsaved.size || writing) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (hasUnsaved() || writing) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('hashchange', async () => {
   if (!ready) return;
   if (!['plan','session','history','manage','detail'].includes(view())) { location.replace('#plan'); return; }
+  rememberView();
   setMenu(false);
   try { await writeQueue; await refresh(); } catch (failure) { error(failure); }
 });

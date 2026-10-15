@@ -1,4 +1,4 @@
-import { stores, validatePlanFile, validateBackup, localDate } from './data.js';
+import { stores, validatePlanFile, validateBackup, migrateBackup, validateSectionFatigue, localDate } from './data.js';
 let connection;
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 export function openDatabase() {
@@ -38,7 +38,7 @@ export function readAll() {
   return transaction(stores, 'readonly', async tx => Object.fromEntries(await Promise.all(stores.map(async name => [name, await request(tx.objectStore(name).getAll())]))));
 }
 export async function backup() {
-  const data = { format: 'climbing-log-backup', schemaVersion: 1, exportedAt: new Date().toISOString(), ...await readAll() };
+  const data = { format: 'climbing-log-backup', schemaVersion: 2, exportedAt: new Date().toISOString(), ...await readAll() };
   return validateBackup(data);
 }
 export function importPlan(value) {
@@ -58,9 +58,9 @@ export function activatePlan(planId) {
   });
 }
 export function restore(value) {
-  validateBackup(value);
+  const migrated = migrateBackup(value);
   return transaction(stores, 'readwrite', tx => {
-    for (const name of stores) { const store = tx.objectStore(name); store.clear(); value[name].forEach(item => store.add(item)); }
+    for (const name of stores) { const store = tx.objectStore(name); store.clear(); migrated[name].forEach(item => store.add(item)); }
   });
 }
 export function startSession(planId) {
@@ -71,7 +71,7 @@ export function startSession(planId) {
     const plan = await request(tx.objectStore('plans').get(planId));
     if (!plan) throw new Error('Importa prima una scheda.');
     const now = new Date().toISOString();
-    const session = { id: crypto.randomUUID(), planId, startedAt: now, localDate: localDate(), endedAt: null, status: 'in_progress', notes: '', updatedAt: now, lastSectionId: [...plan.sections].sort((a, b) => a.order - b.order)[0].id };
+    const session = { id: crypto.randomUUID(), planId, startedAt: now, localDate: localDate(), endedAt: null, status: 'in_progress', notes: '', updatedAt: now, lastSectionId: [...plan.sections].sort((a, b) => a.order - b.order)[0].id, sectionFatigue: [] };
     tx.objectStore('sessions').add(session); return session;
   });
 }
@@ -94,6 +94,20 @@ export function updateRecords(sessionId, patches) {
       record.updatedAt = now; tx.objectStore('records').put(record);
     }
     session.updatedAt = now; tx.objectStore('sessions').put(session);
+  });
+}
+export function updateSectionFatigue(sessionId, sectionId, value) {
+  return transaction(['sessions', 'plans'], 'readwrite', async tx => {
+    const session = await request(tx.objectStore('sessions').get(sessionId));
+    if (!session || session.status !== 'in_progress') throw new Error('La sessione è già terminata. Ricarica per vedere lo storico.');
+    const plan = await request(tx.objectStore('plans').get(session.planId));
+    // Validate the target even when clearing a rating.
+    validateSectionFatigue([{ sectionId, value: value === null ? 1 : value }], plan.sections);
+    const ratings = (session.sectionFatigue || []).filter(r => r.sectionId !== sectionId);
+    if (value !== null) ratings.push({ sectionId, value });
+    validateSectionFatigue(ratings, plan.sections);
+    session.sectionFatigue = ratings; session.updatedAt = new Date().toISOString();
+    tx.objectStore('sessions').put(session);
   });
 }
 export function selectSection(sessionId, sectionId) {

@@ -15,6 +15,20 @@ function unique(list, key) {
   }
   return map;
 }
+export function fatigueCode(section) {
+  const code = section?.code?.trim().toUpperCase();
+  return code === 'BLOC' ? 'BLC' : ['VOL', 'CIRC', 'BLC'].includes(code) ? code : null;
+}
+export function validateSectionFatigue(ratings, sections) {
+  if (!Array.isArray(ratings)) fail('stanchezza per fase');
+  const seen = new Set();
+  for (const rating of ratings) {
+    const section = object(rating) && sections.find(s => s.id === rating.sectionId);
+    if (!section || !fatigueCode(section) || seen.has(rating.sectionId) ||
+        !Number.isInteger(rating.value) || rating.value < 1 || rating.value > 10) fail('stanchezza per fase');
+    seen.add(rating.sectionId);
+  }
+}
 function checkPlan(plan, exercises) {
   if (!string(plan.title) || !plan.title.trim() || !Number.isSafeInteger(plan.revision) || plan.revision < 1 ||
       !timestamp(plan.createdAt) || !string(plan.notes) || !Array.isArray(plan.sections) || !plan.sections.length ||
@@ -57,7 +71,7 @@ export function validatePlanFile(value) {
   return { plan: value.plan, exercises: value.exercises };
 }
 export function validateBackup(value) {
-  if (!object(value) || value.format !== 'climbing-log-backup' || value.schemaVersion !== 1 || !timestamp(value.exportedAt) || stores.some(s => !Array.isArray(value[s]))) fail('formato backup o versione');
+  if (!object(value) || value.format !== 'climbing-log-backup' || ![1, 2].includes(value.schemaVersion) || !timestamp(value.exportedAt) || stores.some(s => !Array.isArray(value[s]))) fail('formato backup o versione');
   const plans = unique(value.plans, 'id'), exercises = unique(value.exercises, 'id');
   const sessions = unique(value.sessions, 'id'); unique(value.records, 'id'); unique(value.settings, 'key');
   for (const p of plans.values()) {
@@ -77,6 +91,10 @@ export function validateBackup(value) {
         (session.endedAt && session.endedAt < session.startedAt) ||
         (session.lastSectionId !== undefined && !plans.get(session.planId).sections.some(s => s.id === session.lastSectionId))) fail('sessioni');
     if (session.status === 'in_progress') active++;
+    if (session.sectionFatigue !== undefined) {
+      if (value.schemaVersion === 1) fail('la stanchezza richiede backup versione 2');
+      validateSectionFatigue(session.sectionFatigue, plans.get(session.planId).sections);
+    }
   }
   if (active > 1) fail('più sessioni in corso');
   const pairs = new Set();
@@ -90,6 +108,11 @@ export function validateBackup(value) {
   }
   for (const setting of value.settings) if (setting.key !== 'activePlanId' || !(setting.value === null || plans.has(setting.value))) fail('impostazioni');
   return value;
+}
+// Explicit format migration; never alter the caller's backup or reset IndexedDB.
+export function migrateBackup(value) {
+  validateBackup(value);
+  return { ...value, schemaVersion: 2, sessions: value.sessions.map(s => ({ ...s, sectionFatigue: s.sectionFatigue ?? [] })) };
 }
 export function localDate(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
