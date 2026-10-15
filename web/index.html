@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Climbing Log</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#216343">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>Climbing Log</h1>
+      <button id="menu-button" class="icon-button" type="button" aria-label="Apri menu" aria-expanded="false" aria-controls="main-menu"><span aria-hidden="true">☰</span></button>
+    </header>
+    <nav id="main-menu" class="menu" aria-label="Navigazione principale" hidden>
+      <a href="#plan">Scheda</a>
+      <a href="#session">Sessione</a>
+      <a href="#history">Storico</a>
+      <a href="#manage">Schede e backup</a>
+    </nav>
+    <p id="save-status" class="version-note" role="status">Caricamento…</p>
+    <div id="error-panel" role="alert" hidden><p id="error-message"></p><button id="retry-save" type="button" hidden>Riprova salvataggio</button></div>
+    <p id="offline-status" class="secondary" role="status"></p>
+    <section id="workout-view" aria-labelledby="view-title" hidden>
+      <h2 id="view-title"></h2>
+      <p id="view-description" class="secondary"></p>
+      <p id="session-date" class="secondary" hidden></p>
+      <button id="all-sessions" type="button" hidden>Tutte le sessioni</button>
+      <button id="start-session" class="primary full-width" type="button">Avvia sessione</button>
+      <nav id="phase-navigation" class="phases" aria-label="Fasi di allenamento"></nav>
+      <p id="session-progress" class="secondary" hidden></p>
+      <h3 id="phase-title"></h3>
+      <p id="state-help" class="secondary" hidden>Tocca lo stato: □ → ✓ → × → □</p>
+      <div id="exercises"></div>
+      <div id="fatigue-field" class="fatigue-field" hidden>
+        <label for="section-fatigue" id="fatigue-label"></label>
+        <select id="section-fatigue" aria-describedby="fatigue-help">
+          <option value="">—</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+          <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+        </select>
+        <span id="fatigue-help" class="screen-reader-only">Facoltativo, da 1 minima a 10 massima. Scegli — per cancellare.</span>
+        <span id="fatigue-value" hidden></span>
+      </div>
+      <div id="phase-actions" hidden>
+        <button id="complete-phase" class="primary full-width" type="button"></button>
+        <button id="undo-phase" class="full-width" type="button" hidden>Annulla completamento fase</button>
+      </div>
+      <nav class="phase-steps" aria-label="Passaggio tra fasi">
+        <button id="previous-phase" type="button">Precedente</button>
+        <button id="next-phase" type="button">Successiva</button>
+      </nav>
+      <button id="finish-session" class="full-width" type="button" hidden>Termina sessione</button>
+      <div id="finish-panel" hidden>
+        <p id="finish-summary"></p>
+        <button id="confirm-finish" class="primary full-width" type="button">Conferma termine</button>
+        <button id="cancel-finish" class="full-width" type="button">Continua allenamento</button>
+      </div>
+    </section>
+    <section id="empty-view" hidden><h2>Nessuna scheda</h2><p>Importa il JSON della tua scheda per iniziare.</p><a href="#manage">Apri schede e backup</a></section>
+    <section id="history-view" hidden><h2>Storico</h2><div id="history-list"></div></section>
+    <section id="manage-view" hidden>
+      <h2>Schede e backup</h2>
+      <label for="plan-file">Importa e attiva una scheda JSON</label>
+      <input id="plan-file" type="file" accept=".json,application/json">
+      <div id="plan-list"></div>
+      <h3>Backup completo</h3><p class="secondary">Salva una copia dei dati. Conservala fuori dal browser.</p>
+      <button id="export-backup" class="full-width" type="button">Esporta backup JSON</button>
+      <label for="backup-file">Ripristina un backup JSON</label>
+      <input id="backup-file" type="file" accept=".json,application/json">
+      <div id="restore-panel" hidden>
+        <p id="restore-summary"></p>
+        <button id="preventive-backup" class="full-width" type="button">1. Scarica backup attuale</button>
+        <button id="confirm-restore" class="full-width" type="button" disabled>2. Conferma sostituzione di tutti i dati</button>
+        <button id="cancel-restore" class="full-width" type="button">Annulla ripristino</button>
+      </div>
+    </section>
+    <p id="announcements" class="screen-reader-only" role="status"></p>
+    <noscript>Per consultare la scheda serve attivare JavaScript nel browser.</noscript>
+  </main>
+  <template id="exercise-template">
+    <article class="exercise">
+      <div class="exercise-header">
+        <button class="expand-button icon-button" type="button" aria-expanded="false"><span aria-hidden="true">+</span></button>
+        <div class="exercise-title">
+          <h4></h4>
+          <p class="prescription"></p>
+          <span class="text-indicator" hidden>Testo presente</span>
+        </div>
+        <button class="state-button icon-button" type="button" hidden><span aria-hidden="true">□</span></button>
+      </div>
+      <div class="exercise-content" hidden>
+        <div class="plan-notes" hidden>
+          <p class="field-label">Note della scheda</p>
+          <p></p>
+        </div>
+        <div class="result-field" hidden>
+          <label>Risultato e note</label>
+          <textarea rows="2" placeholder="Facoltativo"></textarea>
+        </div>
+        <details class="previous-notes" hidden>
+          <summary>Note precedenti</summary>
+          <p class="previous-date secondary"></p>
+          <p class="previous-text"></p>
+        </details>
+      </div>
+    </article>
+  </template>
+</body>
+</html>
