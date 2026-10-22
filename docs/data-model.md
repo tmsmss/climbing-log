@@ -1,6 +1,6 @@
 # Modello dati
 
-Schede v1 confrontate con il PDF locale; backup v2 dal 15 ottobre 2026.
+Schede v1 confrontate con il PDF locale; backup corrente v3 dal 22 ottobre 2026.
 Vedere [analisi della scheda](pdf-review.md).
 Nomi tecnici in inglese, interfaccia in italiano. Separare la prescrizione
 dell'allenamento dai risultati effettivamente registrati.
@@ -12,7 +12,7 @@ dell'allenamento dai risultati effettivamente registrati.
 | `plans` | `id`, `title`, `revision`, `previousPlanId`, `createdAt`, `validFrom`, `validTo`, `notes`, `sections` | Una versione di una scheda; le sezioni sono oggetti incorporati con `id`, `title`, `order` |
 | `exercises` | `id`, `planId`, `sectionId`, `order`, `name`, `prescription`, `notes` | Una voce prescritta in una precisa scheda/sezione |
 | `sessions` | `id`, `planId`, `startedAt`, `localDate`, `endedAt`, `status`, `notes`, `updatedAt`, `lastSectionId`, `sectionFatigue` | Un allenamento riferito a una scheda; stanchezza facoltativa per fase |
-| `records` | `id`, `sessionId`, `exerciseId`, `status`, `resultText`, `sets`, `updatedAt` | Risultato e osservazioni in un testo unico per esercizio |
+| `records` | `id`, `sessionId`, `exerciseId`, `status`, `resultText`, `updatedAt` | Risultato e osservazioni in un testo unico per esercizio |
 | `settings` | `key`, `value` | Solo impostazioni necessarie, inizialmente `activePlanId` |
 
 Relazioni: una scheda contiene sezioni e molti esercizi; una scheda può avere
@@ -32,13 +32,13 @@ senza dedurre equivalenze dai nomi.
   storico cambi con il fuso orario. `endedAt` è `null` fino alla chiusura.
 - `previousPlanId`: ID della versione precedente, oppure `null`; `revision` è un
   intero positivo. `validFrom` e `validTo` sono facoltativi (`null` se ignoti).
-- `status` sessione: `in_progress`, `completed`, `abandoned`. MVP: al massimo una
+- `status` sessione: `in_progress`, `completed`. MVP: al massimo una
   sessione in corso, riprendibile. Completarla non implica aver svolto tutti gli esercizi.
 - `status` registrazione: `pending`, `completed`, `skipped`. Assenza di una
   registrazione significa esercizio non ancora registrato. `pending` permette
   di salvare risultati parziali senza marcare l'esercizio come completato.
 - Una sola registrazione per coppia `(sessionId, exerciseId)`; i salvataggi successivi
-  aggiornano quella registrazione. Le serie eventuali stanno nel suo array `sets`.
+  aggiornano quella registrazione. Nessuna registrazione distinta per serie.
 - `prescription`: `sets` (numero intero o `null`), `repsText` (stringa),
   `durationSeconds` e `restSeconds` (numeri non negativi o `null`), `instructions`
   (testo libero). Il testo conserva range, circuiti, progressioni e indicazioni
@@ -58,9 +58,9 @@ senza dedurre equivalenze dai nomi.
 - `resultText` è una stringa, anche vuota: unico campo facoltativo «Risultato e note»
   per esercizio nell'MVP (scelta confermata). Non aggiungere `records.notes`;
   le note della scheda, dell'esercizio prescritto e dell'intera sessione restano
-  distinte. `sets` resta vuoto. In futuro ogni serie potrà avere
-  `number`, `reps`, `durationSeconds`, `loadKg`, `notes`, con valori ignoti `null`.
-  Le unità sono esplicite: secondi, chilogrammi. Nessun grado d'arrampicata numerico
+  distinte. Il campo `records.sets` è stato rimosso: non esiste un formato per
+  risultati per serie. Le serie prescritte in `prescription.sets` rimangono:
+  descrivono la scheda e sono mostrate nell'interfaccia. Nessun grado numerico
   o calcolo dei progressi viene imposto ora.
 - La sessione raggruppa gli esercizi per `sectionId`, nell'ordine delle sezioni
   della scheda. L'avanzamento per fase è derivato dagli stati delle registrazioni,
@@ -104,10 +104,10 @@ di errore. Chiusura con conferma e storico in sola lettura, senza trasformare
 esercizi vuoti in completati. Nessuna modifica/eliminazione di schede già usate.
 
 Backup e ripristino sono implementati. Il ripristino valida tutto prima di
-scrivere e sostituisce i cinque store in transazione. Prima richiede download
-preventivo e conferma che il file sia disponibile: il browser può avviare il
-download, ma l'app non può garantire dove l'utente abbia conservato il file.
-Le serie dettagliate non sono ancora supportate: `sets` deve essere vuoto.
+scrivere e sostituisce i cinque store in transazione. Un avviso invita a
+conservare un backup preventivo tramite il comando separato di esportazione;
+non ci sono download o attestazioni obbligatorie nel percorso di ripristino.
+Riepilogo, conferma esplicita e annullamento rimangono nell'app.
 
 «+» prima del nome apre il pannello dell'esercizio; toggle a destra indipendente.
 Più pannelli possono restare aperti: scelta semplice, da valutare nell'uso.
@@ -175,37 +175,38 @@ con due schede del browser aperte. Le modifiche di più store sono atomiche.
 
 ## Backup JSON completo
 
-Contenitore con `format: "climbing-log-backup"`, `schemaVersion: 2`, `exportedAt`,
+Contenitore con `format: "climbing-log-backup"`, `schemaVersion: 3`, `exportedAt`,
 `plans`, `exercises`, `sessions`, `records`, `settings`. Esportare una lettura
 coerente degli store nella stessa transazione, inclusa la sessione in corso.
-`schemaVersion` riguarda il formato dei dati; la versione IndexedDB riguarda la
-struttura degli store: devono avere migrazioni esplicite, senza confonderle.
+Il ripristino accetta soltanto v3; non ci sono riconoscimenti o migrazioni v1/v2.
+I vecchi file vengono convertiti fuori dall'app e l'originale viene conservato.
+I campi sconosciuti non vengono interpretati; il codice valida i campi usati.
 
-La struttura IndexedDB rimane v1: nessuno store o indice cambia e le sessioni
-già presenti vengono lette senza aggiungere o riscrivere campi automaticamente.
-Il nuovo campo è facoltativo anche nel backup v2. L'esportazione produce v2;
-il ripristino accetta v1 e v2, valida tutto e applica `migrateBackup` prima della
-transazione: porta il contenitore a v2 e aggiunge `sectionFatigue: []` dove manca,
-senza modificare il file originale o dedurre voti. V1 con stanchezza viene
-rifiutato come formato incoerente; versioni future vengono rifiutate.
-Le vecchie versioni dell'app v1 non leggono i nuovi backup v2.
+La struttura IndexedDB rimane v1: store e indici non cambiano, nessun reset o
+riscrittura automatica. `schemaVersion` del backup è distinto dalla versione
+IndexedDB. Nuove registrazioni senza `sets`; nessuna conversione automatica dei
+file. Il backup convertito del 22 ottobre conserva tutti gli ID e riferimenti,
+note, stati, stanchezza e date; cambia soltanto versione, titolo concordato della
+scheda e rimozione degli array `sets` vuoti. Originale e conversione sono privati.
 
-Direzione concordata il 15 ottobre 2026: mantenere in futuro un solo formato
-corrente nell'app e semplificare il codice rimuovendo la gestione dei formati
-precedenti quando superflua. L'utilizzatore preferisce una conversione assistita
-dei vecchi backup fuori dall'app, anche con Codex, all'accumulo di compatibilità
-permanente. La conversione deve conservare dati e riferimenti e produrre un file
-valido per il formato corrente. Questa preferenza riguarda i formati dei dati;
-le revisioni delle schede e le loro prescrizioni storiche restano conservate.
-La rimozione della compatibilità v1/v2 non fa parte dell'incremento corrente;
-il lavoro futuro è annotato nella [roadmap](roadmap.md#semplificazione-futura-dei-formati).
+### Eliminazione di una sessione terminata
+
+Il comando compare nel dettaglio di una sessione `completed`. Dopo la conferma
+con data, si verifica di nuovo lo stato nel database e si eliminano sessione e
+registrazioni associate tramite l'indice `records.sessionId`, nella stessa
+transazione. Errore o annullamento non lasciano cancellazioni parziali. Le altre
+sessioni, la scheda e gli esercizi restano identici. Nessun cestino o annullamento
+dopo il completamento. La UI torna allo storico e dimentica il dettaglio eliminato; anche un vecchio
+collegamento a un dettaglio assente riapre lo storico;
+le note precedenti sono ricalcolate dall'archivio rimasto. Rifiutare una sessione
+ancora in corso o un ID inesistente, anche da un'altra finestra.
 
 Esempio sintetico ridotto ma completo nelle relazioni (non tratto dal PDF):
 
 ```json
 {
   "format": "climbing-log-backup",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "exportedAt": "2026-10-08T18:00:00Z",
   "plans": [{
     "id": "plan-demo-1", "title": "Scheda esempio", "revision": 1,
@@ -232,7 +233,7 @@ Esempio sintetico ridotto ma completo nelle relazioni (non tratto dal PDF):
   "records": [{
     "id": "record-demo-1", "sessionId": "session-demo-1",
     "exerciseId": "exercise-demo-1", "status": "completed",
-    "resultText": "3 serie da 8, ultima serie impegnativa", "sets": [],
+    "resultText": "3 serie da 8, ultima serie impegnativa",
     "updatedAt": "2026-10-08T16:10:00Z"
   }],
   "settings": [{"key": "activePlanId", "value": "plan-demo-1"}]
@@ -240,12 +241,12 @@ Esempio sintetico ridotto ma completo nelle relazioni (non tratto dal PDF):
 ```
 
 Gli ID leggibili dell'esempio sostituiscono UUID solo per rendere chiari i legami.
-Il ripristino MVP è una sostituzione completa: leggere e validare tutto il file
-prima delle scritture, rifiutare versioni future non supportate, mostrare quantità
-e conseguenze, consentire backup preventivo e richiedere conferma. Non procedere
-se il backup preventivo dei dati esistenti fallisce. Cancellazione e inserimento
-nei cinque store avvengono nella stessa transazione; un errore annulla tutto.
-Non eliminare e ricreare il database per fare il ripristino.
+Il ripristino è una sostituzione completa: leggere e validare tutto prima
+delle scritture, rifiutare formati diversi da v3, mostrare quantità e conseguenze
+e richiedere conferma. Il backup preventivo è ricordato nell'avviso, senza
+verifiche automatiche. Cancellazione e inserimento nei cinque store avvengono
+nella stessa transazione; un errore annulla tutto. Non eliminare e ricreare il
+database per fare il ripristino.
 
 ## Inserimento di nuove schede
 
@@ -268,3 +269,8 @@ il passato; collegare `previousPlanId` solo quando la scheda precedente è prese
 Non serve un editor o un parser nell'MVP. Un eventuale parser Python produrrà
 lo stesso formato, con revisione umana, solo se il volume e la ripetitività del
 lavoro lo giustificano; non farà parte del runtime dell'app.
+
+Contesto confermato il 22 ottobre: una sola sessione settimanale per l'anno in
+corso. Conservare `weeklySchedule` come metadato; non implementare la selezione
+di combinazioni di fasi senza un esempio reale e una nuova decisione. Per altri
+utilizzatori, un futuro supporto multi-giorno richiederà anche di definire il parser.

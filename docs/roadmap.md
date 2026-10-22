@@ -5,7 +5,7 @@ l'incarico corrente: la roadmap non autorizza da sola la fase successiva.
 
 ## Stato e metodo di avanzamento
 
-Aggiornamento: 15 ottobre 2026.
+Aggiornamento: 22 ottobre 2026.
 
 - Fondamenta documentali e analisi visiva del PDF: completate.
 - Mockup: tre viste esplorate; ultima anteprima con trascrizione manuale delle
@@ -18,15 +18,16 @@ Aggiornamento: 15 ottobre 2026.
 - Prima scheda reale: JSON privato trascritto manualmente dal PDF e validato,
   19 esercizi, sei fasi e due pause distinte; ignorato da Git.
 - Incremento 5: manifest, icone e offline implementati e provati nel browser.
-  Primo allenamento da telefono svolto dall'utilizzatore; installazione e
-  modalità aereo su Android non confermate separatamente.
-- Pubblicazione: `local/pages/` è un repository su `gh-pages`, con commit
-  `c135d92` e upstream `origin/gh-pages`. Sorgenti su `main`, app preesistente
-  ancora senza commit nella radice. Istruzioni aggiornate in `docs/first-test.md`.
+  Primo allenamento da telefono svolto dall'utilizzatore; installazione da Chrome
+  confermata il 22 ottobre. Modalità aereo Android ancora da verificare.
+- Pubblicazione: `local/pages/` è un repository su `gh-pages`, con aggiornamento
+  pubblicato al commit `5b2a891` e upstream `origin/gh-pages`. L'utilizzatore ha
+  eseguito commit e push; sorgenti su `main`. Istruzioni in `docs/first-test.md`.
 - Incremento del 15 ottobre: note immediate, stanchezza per fase, note precedenti
   della stessa scheda e memoria della navigazione implementate localmente;
-  verifiche locali completate, pubblicazione e prova Android dell'incremento
-  da completare.
+  verifiche locali completate. Il 22 ottobre l'utilizzatore conferma l'esito
+  positivo in allenamento e l'installazione da Chrome Android. Offline Android
+  ancora da verificare separatamente.
 
 Verifiche del primo incremento: Edge, sei fasi a 320/390/736 px nei temi
 chiaro/scuro, pannelli e note aperti inclusi. Provati tastiera, menu/Escape,
@@ -50,13 +51,61 @@ limiti qui, conservando decisioni tecniche nel README o nel modello dati.
 
 ## Prossimo passo
 
-Pubblicare l'incremento locale con la [procedura Git/Pages](first-test.md) e
-provarlo sul telefono usando lo stesso indirizzo/profilo, senza cancellare dati
-o reimportare la scheda. Confermare compattezza del selettore, consultazione
-delle note durante l'allenamento e aggiornamento/offline della PWA.
-Gli altri sviluppi elencati sotto restano fermi per decisione dell'utilizzatore.
+Provare l'incremento del 22 ottobre in allenamento dopo la pubblicazione e
+il ripristino del backup convertito v3. Il 22 ottobre l'utilizzatore conferma
+l'esito positivo dell'incremento precedente e l'installazione da Chrome Android;
+la modalità aereo resta da verificare separatamente. Dopo la prova valutare
+un eventuale ultimo passaggio grafico, senza avviarlo automaticamente.
+La [procedura Git/Pages](first-test.md) prevede prima commit/push dei sorgenti
+su `main`, poi commit/push della copia statica `local/pages` su `gh-pages`.
 
-### Incremento autorizzato il 15 ottobre
+### Incremento autorizzato il 22 ottobre
+
+Risultato: eliminazione delle sessioni terminate, pannelli essenziali e ripristino
+ridotto a scelta file, riepilogo, conferma/annullamento. Un solo backup corrente v3,
+senza migrazioni dei file, campi di risultati per serie o stato `abandoned`.
+Vincoli: nessuna nuova dipendenza, nessun reset, schede storiche e riferimenti
+conservati; `weeklySchedule` resta un metadato, senza nuovi flussi per più giorni.
+
+Criteri osservabili:
+
+- cancellare solo dal dettaglio terminato, con data e conferma; sessione e risultati
+  spariscono insieme, senza toccare scheda, esercizi o altre sessioni;
+- dopo cancellazione tornare allo storico, senza link al dettaglio eliminato;
+  note precedenti aggiornate; rifiuto della cancellazione di una sessione attiva;
+- testata senza messaggi di successo o legenda degli stati; errori e riprova visibili;
+  note prescritte senza titolino, note precedenti con sola data e testo;
+- pulsanti export/restore coerenti, avviso di backup preventivo, nessun download
+  imposto o integrato nel ripristino; validazione completa e rollback conservati;
+- rifiuto dei vecchi file v1/v2; nuovi risultati senza `sets`, backup v3 valido;
+  convertire il file privato mantenendo tutte le informazioni effettive.
+
+Backup privato esaminato: due sessioni terminate (8/15 ottobre), una in corso del
+22 ottobre senza risultati, 19 esercizi e 38 registrazioni. Conversione separata
+v3 validata; rimossi solo gli array `sets` vuoti e rinominato il titolo in
+«Corso soft ottobre 26». Confronto inverso dell'intero oggetto identico all'originale.
+Nessun dato reale incluso nei sorgenti o nelle fixture pubblicabili.
+
+Verifiche del 22 ottobre completate: 29 test Node passati; prova Edge completa
+con fixture sintetiche e profilo separato passata. Verificati eliminazione e
+annullamento, rollback dopo cancellazioni già accodate, rifiuto di sessioni attive,
+conservazione di altre sessioni e schede, storico vuoto e collegamenti eliminati,
+ricalcolo delle note precedenti, restore v3 e rifiuto v1/v2 senza scritture.
+Ripassati salvataggio/ripresa, concorrenza, errore/riprova, note letterali,
+stanchezza, navigazione/scroll, export e rollback ripristino, riapertura e
+scritture offline sotto /climbing-log/. Sei fasi a 320/390/736 px nei temi
+chiaro/scuro, nessun overflow; controllo visivo MOB/VOL e gestione backup.
+Prova separata di aggiornamento cache v2 → v3 passata: il vecchio worker attende
+la chiusura, poi nuova UI e dati IndexedDB invariati; menu/Escape e scelta file
+con tastiera verificati. Il backup reale convertito è stato importato, riesportato
+e ricaricato in un profilo isolato, senza modificare l'archivio sul telefono:
+tutti i dati identici e sessione in corso riprendibile. Nessun errore JavaScript.
+Diff e link documentali controllati; i sei asset modificati in local/pages
+corrispondono ai sorgenti. Nessun commit/push o pubblicazione automatica.
+Limiti: prova fisica Android del nuovo incremento, modalità aereo sul telefono
+e verifica online dopo pubblicazione da completare.
+
+### Cronologia: incremento autorizzato il 15 ottobre
 
 Risultato: ridurre i tocchi per le note e la consultazione del lavoro precedente;
 aggiungere una sola valutazione facoltativa della stanchezza per VOL/CIRC/BLC.
@@ -98,8 +147,41 @@ rollback, termine, download, restore e riapertura/salvataggio offline sotto
 selettore alto almeno 44 px. Controllo visivo di MOB e VOL, nessun errore JavaScript.
 La shell limitata non avviava Edge; prova completata nel runtime Node disponibile
 con percorso esplicito del browser, senza installare dipendenze.
-Non eseguiti: test fisici Android dell'incremento, aggiornamento da una cache
-v1 già installata sul telefono e verifica online dopo pubblicazione.
+Limiti al termine delle prove locali: non erano ancora eseguiti test fisici
+Android dell'incremento, aggiornamento da una cache v1 già installata sul telefono
+e verifica online dopo pubblicazione. Segue l'aggiornamento successivo.
+
+Aggiornamento successivo del 15 ottobre: push `gh-pages` a `5b2a891` confermato;
+pagina pubblicata con il nuovo selettore e worker `climbing-log-v2` verificati
+online. Dopo una nuova chiusura delle schede e riapertura, l'utilizzatore conferma
+che le modifiche funzionano sul telefono. Il test completo durante l'allenamento
+e la verifica offline Android restano da svolgere.
+
+### Appunti UX da approfondire dopo il test in allenamento
+
+Raccolti il 15 ottobre 2026; discussi e autorizzati il 22 ottobre. Le formulazioni
+seguenti conservano i problemi iniziali; la soluzione concordata è descritta sopra.
+
+1. **Eliminazione di una sessione dallo storico.** Valutare il comando e quali
+   sessioni rendere eliminabili; definire conferma/eventuale annullamento e
+   gestione coerente delle registrazioni collegate.
+2. **Data della scheda distinta dalla data della sessione.** La data oggi inclusa
+   nel titolo della scheda genera ambiguità anche nelle viste che lo riutilizzano.
+   Rivedere la presentazione in scheda, sessione, storico e altre viste collegate;
+   valutare come separare titolo e data/periodo della scheda dalla data effettiva
+   dell'allenamento.
+3. **Pulizia e gerarchia visiva delle schermate.** Individuare testi ed elementi
+   da ridurre, accorpare o distinguere meglio per una navigazione più chiara e
+   compatta; scegliere gli interventi a partire dalle schermate usate realmente.
+4. **Coerenza dei comandi e flusso di backup/ripristino.** Rendere omogenei
+   l'aspetto e l'accessibilità di esportazione e ripristino: attualmente esporta
+   è un pulsante grande, mentre ripristina appare come testo/selettore file.
+   Conservare l'utile riepilogo del contenuto e l'avviso sulla sostituzione dei
+   dati. Rivedere insieme passi, etichette e abilitazione dei comandi: oggi
+   «Conferma sostituzione» resta disabilitato finché si usa «Scarica backup
+   attuale», obbligando a scaricarlo nuovamente anche se già disponibile.
+   Valutare un percorso per chi possiede già un backup adeguato, senza decidere
+   ora se o come rimuovere il vincolo. «Annulla ripristino» deve restare chiaro.
 
 Priorità concordate dopo il primo uso:
 
@@ -123,7 +205,7 @@ saranno valutati soltanto se emergono dall'uso.
 | 2. Archivio locale e schede | Implementato: IndexedDB v1, JSON, selezione attiva, schede precedenti | Verificati ricarica, validazione e import non distruttivo |
 | 3. Sessione | Implementato: avvio, risultato/note, fasi, salvataggio/ripresa, termine | Verificati ripresa ed errori/riprova; abbandono non richiesto |
 | 4. Storico e backup | Implementato: dettaglio, versioni conservate, export e restore con conferma/backup | Verificati conservazione, round trip, download e rollback |
-| 5. PWA e rilascio | PWA implementata; prima copia Pages su gh-pages, primo uso da telefono riferito | Offline browser verificato; aggiornamento corrente e installazione/offline Android da verificare |
+| 5. PWA e rilascio | Incremento del 15 ottobre pubblicato e installato; versione del 22 ottobre preparata localmente | Offline browser verificato; pubblicazione e prova Android del nuovo incremento da completare |
 
 Il primo MVP utilizzabile comprende tutti e cinque gli incrementi. Fino alla
 verifica del backup usare soltanto dati di prova. Le nuove schede useranno un
@@ -145,21 +227,14 @@ reale per fare un test. Nessuna dipendenza aggiunta nel primo incremento.
 
 ## Dopo l'MVP
 
-### Semplificazione futura dei formati
+### Semplificazione dei formati
 
-Preferenza confermata dall'utilizzatore il 15 ottobre 2026: privilegiare una
-base codice pulita e semplice, con un unico formato corrente dei dati, evitando
-di accumulare nell'app riconoscimenti, percorsi alternativi e migrazioni per
-più formati precedenti. In un futuro incremento dedicato, rivedere e rimuovere
-la compatibilità storica diventata superflua, compresi fallback e test dedicati
-ai formati ritirati.
-
-Quando necessario, convertire i backup delle sessioni precedenti al formato
-corrente con un passaggio assistito fuori dall'app, anche con l'aiuto di Codex.
-Verificare la conversione conservando sessioni, risultati, note e riferimenti;
-le revisioni storiche delle schede mantengono prescrizioni e identità distinte.
-La compatibilità v1/v2 appena implementata resta per ora invariata: questa è
-una direzione di manutenzione futura, senza avviare ora la pulizia.
+Direzione del 15 ottobre attuata nell'incremento del 22 ottobre: un solo formato
+backup v3, senza `migrateBackup` o percorsi v1/v2 nell'app. Rimossi campo vuoto
+`records.sets`, stato inutilizzato `abandoned` e test delle migrazioni ritirate.
+Conservati validazione, protezioni IndexedDB e revisioni delle schede. Conversioni
+di vecchi backup fuori dall'app, confrontando integralmente i dati e conservando
+l'originale. Non aggiungere nuovi fallback per questo incremento.
 
 ### Altri sviluppi da approfondire
 
@@ -176,3 +251,7 @@ Parser PDF o Excel dedicato soltanto se la conversione diventa onerosa e il
 template è abbastanza stabile. Non serve un editor di schede ora.
 
 Backend, account e sincronizzazione restano fuori dal progetto previsto.
+
+Contesto del 22 ottobre: quest'anno una sessione settimanale; non serve ora il
+supporto a giornate con combinazioni diverse di fasi. Manca una scheda di esempio:
+valutare il caso e il relativo parser solo per una futura esigenza concreta.

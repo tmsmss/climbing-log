@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
-import { planFixture, backupFixture } from './fixture.mjs';
+import { planFixture } from './fixture.mjs';
 const { chromium } = await import(pathToFileURL(process.argv[2]).href);
 const serverCode = `import http.server,os
 os.chdir('web')
@@ -121,9 +121,13 @@ try {
   await page.locator('#finish-session').click(); await page.locator('#confirm-finish').click();
   await page.waitForFunction(() => location.hash.startsWith('#detail/'));
   await page.locator('#view-title').filter({hasText:'Sessione terminata'}).waitFor();
+  assert.equal(await page.locator('#save-status').getAttribute('class'),'screen-reader-only');
+  assert.equal(await page.locator('#state-help').count(),0);
+  assert.equal(await page.locator('.field-label').count(),0);
   const completed = await dbCall('backup');
+  assert.ok(completed.records.every(r => !('sets' in r)));
   assert.equal(completed.sessions[0].status,'completed');
-  assert.equal(completed.schemaVersion,2);
+  assert.equal(completed.schemaVersion,3);
   assert.deepEqual(completed.sessions[0].sectionFatigue,ratedSession.sectionFatigue);
   assert.ok(completed.sessions[0].endedAt);
   assert.equal(completed.records.find(r => r.exerciseId === fixture.exercises[0].id).resultText,'Testo dopo errore');
@@ -140,22 +144,58 @@ try {
   assert.equal(exported.sessions[0].status,'completed');
   await page.locator('#backup-file').setInputFiles({name:'restore.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exported))});
   await page.locator('#restore-panel').waitFor({state:'visible'});
-  assert.equal(await page.locator('#confirm-restore').isDisabled(),true);
-  const preventive = page.waitForEvent('download'); await page.locator('#preventive-backup').click(); await preventive;
-  page.once('dialog', dialog => dialog.accept()); await page.locator('#confirm-restore').click();
+  assert.equal(await page.locator('#confirm-restore').isEnabled(),true);
+  assert.equal(await page.locator('#preventive-backup').count(),0);
+  await page.locator('#confirm-restore').click();
   await page.locator('#restore-panel').waitFor({state:'hidden'});
   assert.equal((await dbCall('backup')).sessions[0].id,exported.sessions[0].id);
+  // Only the current backup format is accepted, without any partial writes.
+  const unsupported = structuredClone(exported); unsupported.schemaVersion = 2;
+  await page.locator('#backup-file').setInputFiles({name:'unsupported.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(unsupported))});
+  await page.locator('#error-panel').waitFor({state:'visible'});
+  assert.equal(await page.locator('#restore-panel').isVisible(),false);
+  assert.deepEqual((await dbCall('readAll')).sessions,exported.sessions);
+  // Cancelling a restore keeps the archive and returns keyboard focus.
+  await page.locator('#backup-file').setInputFiles({name:'restore.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exported))});
+  await page.locator('#cancel-restore').click();
+  assert.equal(await page.locator('#choose-backup').evaluate(el => el === document.activeElement),true);
+  // A deletion error after record deletions have been queued must roll back both stores.
+  assert.equal(await page.evaluate(async id => {
+    const db = await import('./db.js'), original = IDBObjectStore.prototype.delete;
+    IDBObjectStore.prototype.delete = function(...args) { if (this.name === 'sessions') throw new Error('Delete failure'); return original.apply(this,args); };
+    try { await db.deleteSession(id); return false; } catch { return true; } finally { IDBObjectStore.prototype.delete = original; }
+  },exported.sessions[0].id),true);
+  assert.deepEqual((await dbCall('readAll')).records,exported.records);
+  assert.deepEqual((await dbCall('readAll')).sessions,exported.sessions);
+  await go(`detail/${exported.sessions[0].id}`);
+  await page.locator('#delete-session').click();
+  assert.ok((await page.locator('#delete-summary').textContent()).includes(exported.sessions[0].localDate));
+  await page.locator('#cancel-delete').click();
+  assert.equal((await dbCall('readAll')).sessions.length,1);
+  await page.locator('#delete-session').click(); await page.locator('#confirm-delete').click();
+  await page.locator('#history-view').waitFor({state:'visible'});
+  const deleted = await dbCall('backup');
+  assert.equal(deleted.sessions.length,0); assert.equal(deleted.records.length,0);
+  assert.deepEqual(deleted.plans,exported.plans); assert.deepEqual(deleted.exercises,exported.exercises);
+  assert.equal(await page.locator('#history-title').evaluate(el => el === document.activeElement),true);
+  assert.equal(await page.locator('#main-menu a[data-history]').getAttribute('href'),'#history');
+  await page.reload(); await page.locator('#history-view').waitFor({state:'visible'});
+  assert.equal((await dbCall('readAll')).sessions.length,0);
+  await go(`detail/${exported.sessions[0].id}`);
+  await page.locator('#history-view').waitFor({state:'visible'});
+  assert.equal(await page.evaluate(() => location.hash),'#history');
+  console.log('PASS deletion, cancellation, rollback, plan preservation and rejection of unsupported format');
   // Synthetic history: skip newer empty notes, never cross plan versions.
   const history = structuredClone(exported), old = history.sessions[0], volExercise = fixture.exercises.find(e => e.sectionId === 'vol');
   old.startedAt = '2026-10-08T10:00:00Z'; old.endedAt = '2026-10-08T12:00:00Z'; old.localDate = '2026-10-08';
   history.sessions.push({...old,id:'newer-empty',startedAt:'2026-10-09T10:00:00Z',endedAt:'2026-10-09T12:00:00Z',localDate:'2026-10-09'});
   history.records = history.records.filter(r => !(r.sessionId === old.id && r.exerciseId === volExercise.id));
-  history.records.push({id:'previous-vol',sessionId:old.id,exerciseId:volExercise.id,status:'completed',resultText:'6a e 6a+ <b>nota precedente</b>',sets:[],updatedAt:old.endedAt});
+  history.records.push({id:'previous-vol',sessionId:old.id,exerciseId:volExercise.id,status:'completed',resultText:'6a e 6a+ <b>nota precedente</b>',updatedAt:old.endedAt});
   const different = planFixture(); different.plan.id = 'different-plan'; different.plan.revision = 2; different.plan.previousPlanId = fixture.plan.id;
   different.exercises = different.exercises.map(e => ({...e,id:`different-${e.id}`,planId:different.plan.id}));
   history.plans.push(different.plan); history.exercises.push(...different.exercises);
   history.sessions.push({...old,id:'other-plan-session',planId:different.plan.id,sectionFatigue:[]});
-  history.records.push({id:'other-plan-note',sessionId:'other-plan-session',exerciseId:`different-${volExercise.id}`,status:'completed',resultText:'Nota di altra scheda',sets:[],updatedAt:old.endedAt});
+  history.records.push({id:'other-plan-note',sessionId:'other-plan-session',exerciseId:`different-${volExercise.id}`,status:'completed',resultText:'Nota di altra scheda',updatedAt:old.endedAt});
   await dbCall('restore',[history]);
   console.log('Synthetic history restored');
   await go('plan');
@@ -172,7 +212,7 @@ try {
   await page.locator('[data-phase="3"]').click();
   await page.locator('.expand-button').first().click();
   await page.locator('.previous-notes summary').first().click();
-  assert.equal(await page.locator('.previous-date').first().textContent(),'Ultime note · 2026-10-08');
+  assert.equal(await page.locator('.previous-date').first().textContent(),'2026-10-08');
   assert.equal(await page.locator('.previous-text').first().textContent(),'6a e 6a+ <b>nota precedente</b>');
   assert.equal(await page.locator('.previous-text b').count(),0);
   assert.equal(await page.locator('textarea').first().inputValue(),'');
@@ -212,6 +252,19 @@ try {
   await go(`detail/${old.id}`); await page.locator('#retry-save').click(); await saved();
   assert.deepEqual((await dbCall('readAll')).sessions.find(s=>s.id===old.id).sectionFatigue,ratedSession.sectionFatigue);
   await go('session'); assert.equal(await page.locator('#section-fatigue').inputValue(),'9');
+  const archiveBeforeDelete = await dbCall('readAll');
+  const activeBeforeDelete = archiveBeforeDelete.sessions.find(s => s.status === 'in_progress');
+  assert.equal(await page.locator('#delete-session').isVisible(),false);
+  assert.equal(await page.evaluate(async id => { try { await (await import('./db.js')).deleteSession(id); return false; } catch { return true; } },activeBeforeDelete.id),true);
+  await go(`detail/${old.id}`);
+  await page.locator('#delete-session').click(); await page.locator('#confirm-delete').click();
+  await page.locator('#history-view').waitFor({state:'visible'});
+  const archiveAfterDelete = await dbCall('readAll');
+  assert.deepEqual(archiveAfterDelete.sessions,archiveBeforeDelete.sessions.filter(s => s.id !== old.id));
+  assert.deepEqual(archiveAfterDelete.records,archiveBeforeDelete.records.filter(r => r.sessionId !== old.id));
+  await go('session');
+  if (!await page.locator('.previous-notes').first().evaluate(el => el.open)) await page.locator('.previous-notes summary').first().click();
+  assert.equal(await page.locator('.previous-text').first().textContent(),'Nessuna nota precedente per questo esercizio con questa scheda.');
   console.log('PASS independent history navigation and retry from historical detail');
   console.log('Offline save/resume completed; checking responsive layout');
   for (const colorScheme of ['light','dark']) {
@@ -238,32 +291,7 @@ try {
   if (await page.locator('.expand-button').first().getAttribute('aria-expanded') === 'false') await page.locator('.expand-button').first().click();
   await page.screenshot({path:'local/training-ux-check.png',fullPage:true});
   await context.setOffline(false);
-  // Existing IndexedDB v1 data has no fatigue field; loading must preserve it.
-  const legacyContext = await browser.newContext({viewport:{width:390,height:844}}), legacyPage = await legacyContext.newPage();
-  legacyPage.on('pageerror', e => errors.push(e.message));
-  await legacyPage.goto(url); await legacyPage.locator('#empty-view').waitFor({state:'visible'});
-  await legacyPage.evaluate(async legacy => {
-    await (await import('./db.js')).restore(legacy);
-    const db = await (await import('./db.js')).openDatabase();
-    await new Promise((resolve,reject) => {
-      const tx = db.transaction('sessions','readwrite'), store = tx.objectStore('sessions'), item = {...legacy.sessions[0]};
-      store.put(item); tx.oncomplete = resolve; tx.onabort = () => reject(tx.error);
-    });
-  },backupFixture());
-  await legacyPage.goto(`${url}#session`); await legacyPage.locator('.state-button').first().waitFor({state:'visible'});
-  await legacyPage.locator('.expand-button').first().click();
-  assert.equal(await legacyPage.locator('textarea').first().inputValue(),'<b>literal text</b>');
-  await legacyPage.locator('[data-phase="3"]').click();
-  assert.equal(await legacyPage.locator('#section-fatigue').inputValue(),'');
-  assert.equal(await legacyPage.locator('.previous-notes:not([hidden])').count(),0);
-  await legacyPage.locator('#section-fatigue').selectOption('5');
-  await legacyPage.waitForFunction(() => document.getElementById('save-status').textContent === 'Dati salvati sul dispositivo');
-  const legacyBackup = await legacyPage.evaluate(async () => (await import('./db.js')).backup());
-  assert.equal(legacyBackup.schemaVersion,2);
-  assert.equal(legacyBackup.records[0].resultText,'<b>literal text</b>');
-  assert.deepEqual(legacyBackup.sessions[0].sectionFatigue,[{sectionId:'vol',value:5}]);
-  await legacyContext.close();
   assert.deepEqual(errors,[]);
-  console.log('PASS: immediate notes; optional fatigue, clear/reload/retry/history/export; previous notes restricted to same plan with literal text; independent navigation and scroll; existing v1 data and backups; original persistence/rollback/offline checks; six phases at 320/390/736 in light/dark. Android not tested.');
+  console.log('PASS: immediate notes; optional fatigue, clear/reload/retry/history/export; previous notes restricted to same plan with literal text; independent navigation and scroll; deletion and current-format restore; original persistence/rollback/offline checks; six phases at 320/390/736 in light/dark. Android not tested.');
 } catch (error) { console.error(error); throw error; }
 finally { await browser?.close(); server.kill(); }

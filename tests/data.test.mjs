@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePlanFile, validateBackup, migrateBackup, localDate } from '../web/data.js';
+import { validatePlanFile, validateBackup, localDate } from '../web/data.js';
 import { planFixture, backupFixture } from './fixture.mjs';
 test('valid plans and backups survive JSON round trip with literal text', () => {
   assert.equal(validatePlanFile(planFixture()).exercises.length, 19);
@@ -9,7 +9,7 @@ test('valid plans and backups survive JSON round trip with literal text', () => 
   assert.equal(localDate(new Date(2026, 0, 2, 23, 59)), '2026-01-02');
 });
 const mutations = {
-  'future version': d => { d.schemaVersion = 3; },
+  'future version': d => { d.schemaVersion = 4; },
   'duplicate IDs': d => { d.records.push({ ...d.records[0] }); },
   'duplicate session exercise': d => { d.records.push({ ...d.records[0], id: 'another' }); },
   'missing plan': d => { d.exercises[0].planId = 'absent'; },
@@ -19,6 +19,7 @@ const mutations = {
   'second active session': d => { d.sessions.push({ ...d.sessions[0], id: 'second' }); },
   'cycle of revisions': d => { d.plans[0].previousPlanId = d.plans[0].id; },
   'negative pause': d => { d.exercises[0].prescription.restSeconds = -1; },
+  'unsupported session status': d => { d.sessions[0].status = 'abandoned'; d.sessions[0].endedAt = d.sessions[0].startedAt; },
   'invalid status': d => { d.records[0].status = 'done'; },
   'invalid calendar date': d => { d.sessions[0].localDate = '2026-02-31'; },
   'unfinished completed session': d => { d.sessions[0].status = 'completed'; },
@@ -26,16 +27,8 @@ const mutations = {
 };
 for (const [name, mutate] of Object.entries(mutations)) test(`reject ${name}`, () => { const data = backupFixture(); mutate(data); assert.throws(() => validateBackup(data)); });
 
-test('v1 backup migrates without mutating or losing historical data', () => {
-  const old = backupFixture(), before = structuredClone(old), migrated = migrateBackup(old);
-  assert.deepEqual(old, before);
-  assert.equal(migrated.schemaVersion, 2);
-  assert.deepEqual(migrated.sessions[0].sectionFatigue, []);
-  assert.deepEqual(migrated.records, old.records);
-  assert.deepEqual(migrateBackup(migrated), migrated);
-});
-test('v2 fatigue survives round trip; absence means unrecorded', () => {
-  const value = migrateBackup(backupFixture());
+test('current fatigue survives round trip; absence means unrecorded', () => {
+  const value = backupFixture();
   value.sessions[0].sectionFatigue = [{ sectionId: 'vol', value: 1 }, { sectionId: 'circ', value: 10 }, { sectionId: 'blc', value: 7 }];
   assert.deepEqual(validateBackup(JSON.parse(JSON.stringify(value))), value);
   delete value.sessions[0].sectionFatigue;
@@ -48,10 +41,10 @@ for (const [name, ratings] of Object.entries({
   'unknown phase': [{ sectionId: 'missing', value: 7 }], 'unsupported phase': [{ sectionId: 'risc', value: 7 }],
   'duplicate phase': [{ sectionId: 'vol', value: 7 }, { sectionId: 'vol', value: 8 }],
 })) test(`reject fatigue ${name}`, () => {
-  const value = migrateBackup(backupFixture()); value.sessions[0].sectionFatigue = ratings;
+  const value = backupFixture(); value.sessions[0].sectionFatigue = ratings;
   assert.throws(() => validateBackup(value));
 });
-test('v1 cannot mislabel fatigue data as an old format', () => {
-  const value = backupFixture(); value.sessions[0].sectionFatigue = [{ sectionId: 'vol', value: 7 }];
+for (const schemaVersion of [1, 2]) test(`reject unsupported backup version ${schemaVersion}`, () => {
+  const value = backupFixture(); value.schemaVersion = schemaVersion;
   assert.throws(() => validateBackup(value));
 });

@@ -22,9 +22,9 @@
       <a href="#history">Storico</a>
       <a href="#manage">Schede e backup</a>
     </nav>
-    <p id="save-status" class="version-note" role="status">Caricamento…</p>
+    <p id="save-status" class="screen-reader-only" role="status">Caricamento…</p>
     <div id="error-panel" role="alert" hidden><p id="error-message"></p><button id="retry-save" type="button" hidden>Riprova salvataggio</button></div>
-    <p id="offline-status" class="secondary" role="status"></p>
+    <p id="offline-status" class="secondary" role="status" hidden></p>
     <section id="workout-view" aria-labelledby="view-title" hidden>
       <h2 id="view-title"></h2>
       <p id="view-description" class="secondary"></p>
@@ -34,7 +34,6 @@
       <nav id="phase-navigation" class="phases" aria-label="Fasi di allenamento"></nav>
       <p id="session-progress" class="secondary" hidden></p>
       <h3 id="phase-title"></h3>
-      <p id="state-help" class="secondary" hidden>Tocca lo stato: □ → ✓ → × → □</p>
       <div id="exercises"></div>
       <div id="fatigue-field" class="fatigue-field" hidden>
         <label for="section-fatigue" id="fatigue-label"></label>
@@ -60,22 +59,28 @@
         <button id="confirm-finish" class="primary full-width" type="button">Conferma termine</button>
         <button id="cancel-finish" class="full-width" type="button">Continua allenamento</button>
       </div>
+      <button id="delete-session" class="danger full-width" type="button" hidden>Elimina sessione</button>
+      <div id="delete-panel" hidden>
+        <p id="delete-summary"></p>
+        <button id="confirm-delete" class="danger full-width" type="button">Elimina definitivamente</button>
+        <button id="cancel-delete" class="full-width" type="button">Annulla eliminazione</button>
+      </div>
     </section>
     <section id="empty-view" hidden><h2>Nessuna scheda</h2><p>Importa il JSON della tua scheda per iniziare.</p><a href="#manage">Apri schede e backup</a></section>
-    <section id="history-view" hidden><h2>Storico</h2><div id="history-list"></div></section>
+    <section id="history-view" hidden><h2 id="history-title" tabindex="-1">Storico</h2><div id="history-list"></div></section>
     <section id="manage-view" hidden>
       <h2>Schede e backup</h2>
       <label for="plan-file">Importa e attiva una scheda JSON</label>
       <input id="plan-file" type="file" accept=".json,application/json">
       <div id="plan-list"></div>
       <h3>Backup completo</h3><p class="secondary">Salva una copia dei dati. Conservala fuori dal browser.</p>
-      <button id="export-backup" class="full-width" type="button">Esporta backup JSON</button>
-      <label for="backup-file">Ripristina un backup JSON</label>
-      <input id="backup-file" type="file" accept=".json,application/json">
+      <button id="export-backup" class="full-width" type="button">Esporta backup</button>
+      <p id="restore-warning" class="secondary">Il ripristino sostituisce tutti i dati. Prima esporta e conserva un backup aggiornato.</p>
+      <button id="choose-backup" class="full-width" type="button" aria-describedby="restore-warning">Ripristina backup</button>
+      <input id="backup-file" type="file" accept=".json,application/json" aria-label="Scegli il backup da ripristinare" hidden>
       <div id="restore-panel" hidden>
         <p id="restore-summary"></p>
-        <button id="preventive-backup" class="full-width" type="button">1. Scarica backup attuale</button>
-        <button id="confirm-restore" class="full-width" type="button" disabled>2. Conferma sostituzione di tutti i dati</button>
+        <button id="confirm-restore" class="full-width" type="button">Conferma sostituzione di tutti i dati</button>
         <button id="cancel-restore" class="full-width" type="button">Annulla ripristino</button>
       </div>
     </section>
@@ -95,7 +100,6 @@
       </div>
       <div class="exercise-content" hidden>
         <div class="plan-notes" hidden>
-          <p class="field-label">Note della scheda</p>
           <p></p>
         </div>
         <div class="result-field" hidden>

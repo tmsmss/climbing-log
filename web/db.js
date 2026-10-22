@@ -1,4 +1,4 @@
-import { stores, validatePlanFile, validateBackup, migrateBackup, validateSectionFatigue, localDate } from './data.js';
+import { stores, validatePlanFile, validateBackup, validateSectionFatigue, localDate } from './data.js';
 let connection;
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 export function openDatabase() {
@@ -38,7 +38,7 @@ export function readAll() {
   return transaction(stores, 'readonly', async tx => Object.fromEntries(await Promise.all(stores.map(async name => [name, await request(tx.objectStore(name).getAll())]))));
 }
 export async function backup() {
-  const data = { format: 'climbing-log-backup', schemaVersion: 2, exportedAt: new Date().toISOString(), ...await readAll() };
+  const data = { format: 'climbing-log-backup', schemaVersion: 3, exportedAt: new Date().toISOString(), ...await readAll() };
   return validateBackup(data);
 }
 export function importPlan(value) {
@@ -58,9 +58,9 @@ export function activatePlan(planId) {
   });
 }
 export function restore(value) {
-  const migrated = migrateBackup(value);
+  validateBackup(value);
   return transaction(stores, 'readwrite', tx => {
-    for (const name of stores) { const store = tx.objectStore(name); store.clear(); migrated[name].forEach(item => store.add(item)); }
+    for (const name of stores) { const store = tx.objectStore(name); store.clear(); value[name].forEach(item => store.add(item)); }
   });
 }
 export function startSession(planId) {
@@ -85,7 +85,7 @@ export function updateRecords(sessionId, patches) {
       const exercise = await request(tx.objectStore('exercises').get(patch.exerciseId));
       if (!exercise || exercise.planId !== session.planId) throw new Error('Esercizio estraneo alla sessione.');
       const previous = await request(tx.objectStore('records').index('sessionExercise').get([sessionId, patch.exerciseId]));
-      const record = previous || { id: crypto.randomUUID(), sessionId, exerciseId: patch.exerciseId, status: 'pending', resultText: '', sets: [] };
+      const record = previous || { id: crypto.randomUUID(), sessionId, exerciseId: patch.exerciseId, status: 'pending', resultText: '' };
       if (patch.status !== undefined) {
         if (!['pending', 'completed', 'skipped'].includes(patch.status)) throw new Error('Stato non valido.');
         record.status = patch.status;
@@ -125,5 +125,16 @@ export function finishSession(sessionId) {
     if (!session || session.status !== 'in_progress') throw new Error('Sessione già terminata.');
     session.status = 'completed'; session.endedAt = new Date().toISOString(); session.updatedAt = session.endedAt;
     tx.objectStore('sessions').put(session);
+  });
+}
+
+// Session and records disappear atomically; a used plan is never deleted.
+export function deleteSession(sessionId) {
+  return transaction(['sessions', 'records'], 'readwrite', async tx => {
+    const session = await request(tx.objectStore('sessions').get(sessionId));
+    if (!session || session.status !== 'completed') throw new Error('Puoi eliminare soltanto una sessione terminata.');
+    const keys = await request(tx.objectStore('records').index('sessionId').getAllKeys(sessionId));
+    keys.forEach(key => tx.objectStore('records').delete(key));
+    tx.objectStore('sessions').delete(sessionId);
   });
 }

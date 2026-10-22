@@ -71,7 +71,7 @@ button:disabled { opacity: .5; cursor: default; }
 .prescription { font-size: .8rem; color: var(--secondary); overflow-wrap: anywhere; }
 .text-indicator { display: inline-block; font-size: .75rem; color: var(--secondary); }
 .exercise-content { padding: 4px 6px 6px; }
-.field-label, .result-field label { font-size: .85rem; color: var(--secondary); }
+.result-field label { font-size: .85rem; color: var(--secondary); }
 .plan-notes p, .previous-text { font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .previous-notes summary { min-height: 44px; padding: 10px 0; font-size: .85rem; cursor: pointer; }
 .previous-notes { margin-top: 6px; border-top: 1px solid var(--border); }
@@ -84,7 +84,12 @@ textarea { display: block; width: 100%; font: inherit; font-size: 16px; padding:
 .phase-steps button { flex: 1; }
 .screen-reader-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #error-panel { border: 2px solid #bd5b35; border-radius: 10px; padding: 10px; overflow-wrap: anywhere; }
-#offline-status { min-height: 1.2em; }
 .list-link { display: block; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin: 10px 0; padding: 12px; overflow-wrap: anywhere; }
 input[type="file"] { display: block; width: 100%; margin: 12px 0 20px; font: inherit; font-size: .9rem; }
-#finish-panel, #restore-panel { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin: 10px 0; }
+#finish-panel, #restore-panel, #delete-panel { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin: 10px 0; }
+
+.plan-notes { margin: 4px 0 14px; padding-left: 10px; border-left: 2px solid var(--border); }
+.previous-notes[open] { padding-bottom: 6px; }
+.previous-date { margin: 0 0 4px; }
+.danger { color: #9c3425; border-color: currentColor; }
+@media (prefers-color-scheme: dark) { .danger { color: #ffad98; } }

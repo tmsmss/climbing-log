@@ -7,12 +7,14 @@ allenamenti, conservando le versioni delle schede e lo storico.
 
 Prima versione funzionante: consultazione per fasi, importazione di schede JSON,
 IndexedDB, sessioni con salvataggio progressivo e ripresa, termine con conferma,
-storico in sola lettura, backup/ripristino JSON e cache offline PWA.
-Primo allenamento da telefono effettuato dall'utilizzatore. La copia di rilascio
-ha già un commit su `gh-pages` in `local/pages`; installazione e modalità aereo
-su Android non sono state confermate separatamente.
-L'incremento del 15 ottobre aggiunge note subito visibili, stanchezza facoltativa
-per VOL/CIRC/BLC, note precedenti della stessa scheda e memoria della navigazione.
+storico con dettaglio in sola lettura, backup/ripristino JSON e cache offline PWA.
+L'incremento del 15 ottobre è pubblicato su `gh-pages` al commit `5b2a891`.
+Il 22 ottobre l'utilizzatore conferma che note, stanchezza e navigazione funzionano
+bene durante gli allenamenti e che ha installato l'app da Chrome Android.
+La modalità aereo sul dispositivo resta da confermare separatamente.
+L'incremento locale del 22 ottobre aggiunge eliminazione delle sessioni terminate,
+pannelli più essenziali e ripristino semplificato. Il backup corrente è v3:
+nessuna conversione dei vecchi formati dentro l'app.
 
 Per uso Android e aggiornamenti Pages seguire [le istruzioni](docs/first-test.md). La scheda del
 PDF è stata trascritta manualmente in `local/scheda-2026-10-08.json`, ignorata da
@@ -32,7 +34,7 @@ sotto `/climbing-log/`. Asset locali, senza CDN o font remoti.
 
 - `app.js`: viste, memoria della navigazione e coda di salvataggio; testi resi come testo semplice.
 - `db.js`: IndexedDB v1, transazioni e operazioni atomiche, senza reset automatici.
-- `data.js`: schede JSON v1, backup v2 con migrazione esplicita da v1,
+- `data.js`: schede JSON v1, solo backup v3, senza migrazioni dei file,
   validazione di JSON, relazioni e integrità storica.
 - `sw.js`: cache dei soli asset dell'app; non gestisce i dati di allenamento.
 
@@ -65,10 +67,18 @@ fino alla ricarica/chiusura. Il menu Storico riapre l'ultimo dettaglio consultat
 «Tutte le sessioni» torna all'elenco. La fase della sessione attiva continua
 anche a essere salvata su dispositivo per la ripresa dopo ricarica.
 
-Le scritture sono immediate; «Dati salvati sul dispositivo» compare soltanto
-dopo la transazione. In caso di errore l'input resta nella pagina e si può
-riprovare. Termine e backup attendono i salvataggi. «Termina sessione» conserva
-anche esercizi vuoti o saltati; lo storico non permette modifiche.
+Le scritture sono immediate; lo stato di successo è annunciato agli strumenti
+di accessibilità soltanto dopo la transazione, senza occupare la testata.
+Errori e modifiche non salvate restano visibili, con riprova. Termine e backup
+attendono i salvataggi. Il dettaglio storico non permette modifiche; il comando
+«Elimina sessione» cancella solo sessioni terminate e le relative registrazioni,
+in un'unica transazione, dopo conferma esplicita con la data. Non cancella schede
+o altre sessioni. Le note precedenti vengono ricalcolate dai dati rimasti.
+
+Nei pannelli espansi le note prescritte non hanno un titolo ripetuto; restano
+distinte dal campo «Risultato e note». «Note precedenti» mostra data e testo.
+Il titolo della scheda può includere mese/anno come testo (es. «Corso soft ottobre
+26»); non viene interpretato come data della sessione. Nessun nuovo campo UI.
 
 ## Protezione dei dati e offline
 
@@ -78,13 +88,18 @@ solo una possibilità, non sostituisce i backup. Esportare dopo l'allenamento.
 Nessuna cifratura locale o dei file di backup.
 
 L'importazione aggiunge e attiva una scheda senza sovrascrivere il passato.
-Il ripristino completo valida prima, richiede un backup preventivo e conferma,
-poi sostituisce in un'unica transazione. In caso di errore restano i dati precedenti.
-Il browser avvia il download: verificare che il file sia stato conservato.
+Il ripristino completo valida prima il backup v3 e mostra quantità e conseguenze.
+Un avviso invita a esportare e conservare prima i dati attuali tramite il pulsante
+separato «Esporta backup»; il flusso di ripristino offre solo conferma e annullamento.
+Non verifica né impone il download preventivo. La conferma sostituisce tutti i dati
+in un'unica transazione: un errore conserva l'archivio precedente. I backup v1/v2
+devono essere convertiti fuori dall'app, conservando l'originale.
 
-PWA: manifest e icone locali, primo caricamento online; aspettare «App pronta
-per l’uso offline» e provare modalità aereo. Nuovi service worker attendono la
-chiusura delle finestre dell'app, evitando reload durante un allenamento.
+PWA: manifest e icone locali, primo caricamento online; provare la modalità aereo.
+Gli avvisi di successo offline sono nascosti, i problemi rimangono visibili.
+I nuovi service worker attendono la chiusura delle finestre dell'app, evitando
+reload durante un allenamento. La cache corrente è `climbing-log-v3`.
+
 Per aggiornamenti futuri incrementare il nome della cache in `sw.js`; eliminare
 solo cache Climbing Log obsolete, mai IndexedDB.
 
@@ -150,18 +165,10 @@ corrente i percorsi disponibili sono:
 node tests/browser-check.mjs 'C:/Users/messi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs' 'C:/Users/messi/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 ```
 
-Questa prova usa un server temporaneo e un profilo browser separato, con Edge e
-fixture sintetiche; non accede all'archivio personale. Il 15 ottobre sono passati
-28 test di validazione/migrazione e la prova browser completa: ricarica/ripresa, testo letterale, stato e
-annullamento, errore di scrittura/riprova, singola sessione fra due finestre,
-import duplicato, rollback ripristino, termine/storico, download e restore,
-riapertura/salvataggio offline sotto `/climbing-log/`, sei fasi a 320/390/736 px
-in tema chiaro/scuro. Nessun errore JavaScript; controllo visivo mobile nel browser.
-Comprende inoltre note immediate, stanchezza (vuoto, cancellazione, riprova,
-storico e backup), note precedenti limitate alla stessa scheda, navigazione
-separata con ripristino dello scroll e dati IndexedDB v1 già presenti.
-Gli esiti dell'ultima esecuzione e i limiti sono nella [roadmap](docs/roadmap.md).
-L'incremento deve ancora essere provato sul telefono e pubblicato.
+Questa prova usa un server temporaneo, Edge e fixture sintetiche in un profilo
+separato; non modifica l'archivio personale. Per gli esiti delle verifiche locali
+e i limiti Android vedere la [roadmap](docs/roadmap.md). Non ci sono build o lint
+dedicati.
 
 ## Collaborazione e prossimi passi
 
@@ -171,7 +178,7 @@ Regole concise in `AGENTS.md`; decisioni nei documenti esistenti. Seguono le
 [iterazione con Codex](https://developers.openai.com/cookbook/examples/codex/iterating-development-workflows-with-codex),
 senza aggiungere infrastrutture finché non servono.
 
-Pubblicare e provare su Android l'incremento del 15 ottobre. Gli altri sviluppi
+Provare in allenamento l'incremento del 22 ottobre e raccogliere osservazioni. Gli altri sviluppi
 restano fermi per decisione dell'utilizzatore: gestione strutturata di gradi e
 risultati, visualizzazione dei progressi nell'app o
 attraverso analisi esterne dei backup. Indicatori di affidabilità e abbandono delle
@@ -183,3 +190,8 @@ Per schede future con giorni
 diversi, chiarire quali sezioni compongono una sessione: la versione corrente
 usa tutte le sezioni della scheda. Sei settimane è un'indicazione, non una
 scadenza che elimina dati o impedisce l'uso.
+
+Quest'anno l'utilizzatore prevede una sola sessione settimanale. `weeklySchedule`
+resta nei dati, senza introdurre selezione del giorno o combinazioni di fasi.
+Manca un esempio reale di scheda con più giorni: prima di supportarla occorrerà
+esaminarne uno e definire anche il parser, se necessario per altri utilizzatori.

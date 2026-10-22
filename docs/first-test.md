@@ -4,6 +4,64 @@ La versione implementa schede JSON, sessioni salvate in IndexedDB, ripresa,
 termine sessione, storico, backup/ripristino e cache offline. Non serve un parser
 PDF: la prima scheda è stata trascritta manualmente e confrontata con il PDF.
 
+## Aggiornamento corrente: 22 ottobre 2026
+
+Sorgenti in `web/`, copia statica da pubblicare in `local/pages/` su `gh-pages`.
+Nuova cache `climbing-log-v3`, stesso database IndexedDB v1. Nessun reset.
+Non sono stati eseguiti commit o push automaticamente. Le sezioni successive
+conservano le procedure storiche, non i comportamenti della nuova versione.
+
+1. Conservare il backup originale e trasferire sul telefono il file privato
+   convertito `local/climbing-log-backup-v3-2026-10-22.json`. Non pubblicarlo in Git.
+2. Salvare prima i sorgenti su `main`, dalla radice
+   `C:\Users\messi\dev\climbing-log`:
+
+   ```powershell
+   git status --short
+   git add README.md docs/*.md tests/ web/
+   git diff --cached --stat
+   git diff --cached --check
+   git commit -m "Simplify training UI, backup format and completed session management"
+   git push origin main
+   ```
+
+   I percorsi espliciti escludono `local/`, schede personali e backup. Questo
+   commit conserva codice, test e documentazione; non aggiorna il sito.
+   Poi pubblicare la copia statica su `gh-pages`, sempre dalla radice, dopo
+   aver verificato che contenga solo asset dell'app:
+
+   ```powershell
+   git -C local/pages status --short
+   git -C local/pages diff --check
+   git -C local/pages add app.js data.js db.js index.html styles.css sw.js
+   git -C local/pages commit -m "Simplify training UI and restore; allow deleting completed sessions"
+   git -C local/pages pull --ff-only origin gh-pages
+   git -C local/pages push origin gh-pages
+   ```
+
+   Se un comando fallisce, fermarsi e verificare; non forzare push o reset.
+3. Dopo il rilascio aprire online lo stesso indirizzo già usato, chiudere tutte
+   le finestre dell'app e schede Chrome relative al sito, poi riaprire online.
+   Il worker attende la chiusura delle finestre; non forza ricariche. Non cancellare
+   i dati del sito. Il messaggio di successo offline non è più visibile.
+4. In «Schede e backup» scegliere «Ripristina backup», selezionare il file v3,
+   verificare il riepilogo di una scheda e tre sessioni e confermare. Sostituisce
+   tutto l'archivio: non farlo dopo aver aggiunto nuovi risultati senza prima
+   conservare un backup aggiornato. La sessione del 22 ottobre è già in corso:
+   riprenderla. Il titolo diventa «Corso soft ottobre 26».
+5. Durante la prova controllare note, stanchezza, ripresa e navigazione. Gli errori
+   restano visibili con riprova; i messaggi di successo non occupano la testata.
+   Per verificare la cancellazione usare una sessione di prova terminata: il
+   comando è nel dettaglio storico e richiede conferma, senza annullamento dopo.
+6. Verificare separatamente riapertura e salvataggio in modalità aereo; al termine
+   esportare il nuovo backup v3 e conservarlo fuori dal browser. La versione
+   precedente dell'app non può ripristinare questo formato.
+
+Non sono previste funzioni per più giornate di allenamento o un parser in questo
+incremento. L'eventuale revisione grafica ulteriore dipende dal riscontro della prova.
+
+## Procedure storiche
+
 ## Aggiornamento del 15 ottobre 2026
 
 L'utilizzatore ha svolto un primo allenamento da telefono. La copia in
