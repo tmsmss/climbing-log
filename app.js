@@ -6,7 +6,7 @@ const symbols = { pending: '□', completed: '✓', skipped: '×' };
 const labels = { pending: 'da fare', completed: 'completato', skipped: 'saltato' };
 let data, plan, session, sections = [], exercises = [], records = new Map();
 let sectionIndex = 0, undo = null, writing = 0, blocked = false, ready = false, closing = false;
-let writeQueue = Promise.resolve(), restoreData = null, preventiveDownloaded = false;
+let writeQueue = Promise.resolve(), restoreData = null;
 const unsaved = new Map(), unsavedFatigue = new Map(), viewStates = new Map();
 let expanded = new Set(), previousNotesOpen = new Set(), renderedKey = null, lastHistoryHash = '#history', pendingSessionId = null;
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -22,6 +22,7 @@ function error(error) {
 }
 function saveStatus() {
   $('save-status').textContent = blocked || hasUnsaved() && !writing ? 'Modifiche da salvare' : writing ? 'Salvataggio…' : 'Dati salvati sul dispositivo';
+  $('save-status').className = blocked || (hasUnsaved() && !writing) ? 'secondary' : 'screen-reader-only';
   $('retry-save').hidden = (!hasUnsaved() && !blocked) || writing > 0;
 }
 function setMenu(open) {
@@ -82,8 +83,12 @@ function rememberView() {
 }
 async function refresh() {
   data = await db.readAll();
-  const kind = view();
+  let kind = view();
   session = kind === 'detail' ? data.sessions.find(s => s.id === location.hash.split('/')[1]) : data.sessions.find(s => s.status === 'in_progress');
+  if (kind === 'detail' && !session) {
+    kind = 'history'; lastHistoryHash = '#history';
+    history.replaceState(null, '', '#history');
+  }
   const planId = ['session', 'detail'].includes(kind) && session ? session.planId : data.settings.find(s => s.key === 'activePlanId')?.value;
   plan = data.plans.find(p => p.id === planId);
   sections = [...(plan?.sections || [])].sort((a, b) => a.order - b.order);
@@ -123,10 +128,11 @@ function render() {
   $('session-date').textContent = showResults ? `${session.localDate} · ${new Date(session.startedAt).toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'})}` : '';
   $('start-session').hidden = kind === 'detail' || editable();
   $('start-session').textContent = session?.status === 'in_progress' ? 'Riprendi sessione' : 'Avvia sessione';
-  $('state-help').hidden = !editable();
   $('phase-actions').hidden = !editable();
   $('finish-session').hidden = !editable();
   $('finish-panel').hidden = true;
+  $('delete-session').hidden = kind !== 'detail' || session?.status !== 'completed';
+  $('delete-panel').hidden = true;
   const phase = sections[sectionIndex];
   $('phase-title').textContent = `${phase.code || ''} · ${phase.title}`;
   $('phase-navigation').replaceChildren();
@@ -165,7 +171,7 @@ function render() {
     previous.hidden = !previousSessions.length;
     previous.open = previousNotesOpen.has(exercise.id);
     const source = previousSessions.map(s => ({ session: s, record: data.records.find(r => r.sessionId === s.id && r.exerciseId === exercise.id && r.resultText.trim()) })).find(item => item.record);
-    previous.querySelector('.previous-date').textContent = source ? `Ultime note · ${source.session.localDate}` : '';
+    previous.querySelector('.previous-date').textContent = source ? source.session.localDate : '';
     previous.querySelector('.previous-text').textContent = source?.record.resultText ?? 'Nessuna nota precedente per questo esercizio con questa scheda.';
     previous.addEventListener('toggle', () => {
       if (!previous.isConnected) return;
@@ -304,24 +310,43 @@ $('plan-file').addEventListener('change', () => action(async () => {
   await refresh(); location.hash = 'plan'; announce('Scheda importata e attivata.');
 }));
 $('export-backup').addEventListener('click', () => action(async () => { download(await db.backup(), 'climbing-log-backup'); announce('Backup pronto per il download.'); }));
+$('choose-backup').addEventListener('click', () => {
+  if (!ready || closing) return;
+  restoreData = null; $('restore-panel').hidden = true; $('backup-file').value = '';
+  $('backup-file').click();
+});
 $('backup-file').addEventListener('change', () => action(async () => {
-  restoreData = null; preventiveDownloaded = false; $('restore-panel').hidden = true;
+  restoreData = null; $('restore-panel').hidden = true;
   const value = await fileJSON($('backup-file')); if (!value) return;
-  restoreData = validateBackup(value); preventiveDownloaded = false; $('confirm-restore').disabled = true;
-  $('restore-summary').textContent = `Il backup contiene ${value.plans.length} schede e ${value.sessions.length} sessioni. Sostituirà tutti i dati attuali. Prima scarica il backup attuale e verifica che il file sia disponibile.`;
-  $('restore-panel').hidden = false;
-}));
-$('preventive-backup').addEventListener('click', () => action(async () => {
-  download(await db.backup(), 'climbing-log-prima-del-ripristino'); preventiveDownloaded = true; $('confirm-restore').disabled = false;
+  restoreData = validateBackup(value);
+  $('restore-summary').textContent = `Il backup contiene ${value.plans.length} schede e ${value.sessions.length} sessioni. Sostituirà tutti i dati attuali. Conferma solo se hai conservato un backup aggiornato dei dati attuali.`;
+  $('restore-panel').hidden = false; $('confirm-restore').focus();
 }));
 $('confirm-restore').addEventListener('click', () => action(async () => {
-  if (!restoreData || !preventiveDownloaded) return;
-  if (!confirm('Hai verificato che il backup attuale sia stato scaricato? Confermi la sostituzione di tutti i dati?')) return;
-  await db.restore(restoreData); restoreData = null; preventiveDownloaded = false; undo = null;
+  if (!restoreData) return;
+  await db.restore(restoreData); restoreData = null; undo = null;
   viewStates.clear(); expanded.clear(); previousNotesOpen.clear(); renderedKey = null; lastHistoryHash = '#history';
-  $('restore-panel').hidden = true; $('backup-file').value = ''; sectionIndex = 0; await refresh(); announce('Backup ripristinato.');
+  $('restore-panel').hidden = true; $('backup-file').value = ''; sectionIndex = 0; await refresh();
+  $('choose-backup').focus(); announce('Backup ripristinato.');
 }));
-$('cancel-restore').addEventListener('click', () => { restoreData = null; $('restore-panel').hidden = true; $('backup-file').value = ''; });
+$('cancel-restore').addEventListener('click', () => {
+  restoreData = null; $('restore-panel').hidden = true; $('backup-file').value = ''; $('choose-backup').focus();
+});
+$('delete-session').addEventListener('click', () => {
+  if (view() !== 'detail' || session?.status !== 'completed') return;
+  $('delete-summary').textContent = `Eliminare la sessione del ${session.localDate}? Risultati, note e stanchezza di questo allenamento saranno eliminati definitivamente. La scheda rimane disponibile.`;
+  $('delete-panel').hidden = false; $('cancel-delete').focus();
+});
+$('cancel-delete').addEventListener('click', () => { $('delete-panel').hidden = true; $('delete-session').focus(); });
+$('confirm-delete').addEventListener('click', () => action(async () => {
+  if (view() !== 'detail' || session?.status !== 'completed') return;
+  const id = session.id;
+  await db.deleteSession(id);
+  viewStates.delete(`detail/${id}`); viewStates.delete('history');
+  lastHistoryHash = '#history'; renderedKey = null; undo = null;
+  history.replaceState(null, '', '#history'); await refresh();
+  $('history-title').focus(); announce('Sessione eliminata.');
+}));
 window.addEventListener('beforeunload', e => { if (hasUnsaved() || writing) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('hashchange', async () => {
   if (!ready) return;
@@ -331,12 +356,14 @@ window.addEventListener('hashchange', async () => {
   try { await writeQueue; await refresh(); } catch (failure) { error(failure); }
 });
 async function setupOffline() {
-  if (!('serviceWorker' in navigator)) { $('offline-status').textContent = 'Offline non disponibile in questo browser.'; return; }
+  const status = $('offline-status');
+  if (!('serviceWorker' in navigator)) { status.hidden = false; status.textContent = 'Offline non disponibile in questo browser.'; return; }
   try {
     await navigator.serviceWorker.register('./sw.js');
     await navigator.serviceWorker.ready;
     $('offline-status').textContent = 'App pronta per l’uso offline.';
-  } catch { $('offline-status').textContent = 'Offline non pronto: mantieni la connessione e ricarica.'; }
+    status.hidden = true;
+  } catch { status.hidden = false; status.textContent = 'Offline non pronto: mantieni la connessione e ricarica.'; }
 }
 (async () => {
   try {

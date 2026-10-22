@@ -1,4 +1,4 @@
-const cacheName = 'climbing-log-v2';
+const cacheName = 'climbing-log-v3';
 const assets = ['./', './index.html', './styles.css', './app.js', './db.js', './data.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 const urls = assets.map(path => new URL(path, self.registration.scope).href);
 self.addEventListener('install', event => {

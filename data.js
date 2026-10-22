@@ -71,7 +71,7 @@ export function validatePlanFile(value) {
   return { plan: value.plan, exercises: value.exercises };
 }
 export function validateBackup(value) {
-  if (!object(value) || value.format !== 'climbing-log-backup' || ![1, 2].includes(value.schemaVersion) || !timestamp(value.exportedAt) || stores.some(s => !Array.isArray(value[s]))) fail('formato backup o versione');
+  if (!object(value) || value.format !== 'climbing-log-backup' || value.schemaVersion !== 3 || !timestamp(value.exportedAt) || stores.some(s => !Array.isArray(value[s]))) fail('formato backup o versione');
   const plans = unique(value.plans, 'id'), exercises = unique(value.exercises, 'id');
   const sessions = unique(value.sessions, 'id'); unique(value.records, 'id'); unique(value.settings, 'key');
   for (const p of plans.values()) {
@@ -86,13 +86,12 @@ export function validateBackup(value) {
   let active = 0;
   for (const session of sessions.values()) {
     if (!plans.has(session.planId) || !timestamp(session.startedAt) || !timestamp(session.updatedAt) || !date(session.localDate) ||
-        !['in_progress', 'completed', 'abandoned'].includes(session.status) || !string(session.notes) ||
+        !['in_progress', 'completed'].includes(session.status) || !string(session.notes) ||
         (session.status === 'in_progress' ? session.endedAt !== null : !timestamp(session.endedAt)) ||
         (session.endedAt && session.endedAt < session.startedAt) ||
         (session.lastSectionId !== undefined && !plans.get(session.planId).sections.some(s => s.id === session.lastSectionId))) fail('sessioni');
     if (session.status === 'in_progress') active++;
     if (session.sectionFatigue !== undefined) {
-      if (value.schemaVersion === 1) fail('la stanchezza richiede backup versione 2');
       validateSectionFatigue(session.sectionFatigue, plans.get(session.planId).sections);
     }
   }
@@ -103,16 +102,11 @@ export function validateBackup(value) {
     const pair = `${record.sessionId}:${record.exerciseId}`;
     if (!session || !exercise || exercise.planId !== session.planId || pairs.has(pair) ||
         !['pending', 'completed', 'skipped'].includes(record.status) || !string(record.resultText) ||
-        !timestamp(record.updatedAt) || !Array.isArray(record.sets) || record.sets.length) fail('registrazioni (serie dettagliate non supportate)');
+        !timestamp(record.updatedAt)) fail('registrazioni');
     pairs.add(pair);
   }
   for (const setting of value.settings) if (setting.key !== 'activePlanId' || !(setting.value === null || plans.has(setting.value))) fail('impostazioni');
   return value;
-}
-// Explicit format migration; never alter the caller's backup or reset IndexedDB.
-export function migrateBackup(value) {
-  validateBackup(value);
-  return { ...value, schemaVersion: 2, sessions: value.sessions.map(s => ({ ...s, sectionFatigue: s.sectionFatigue ?? [] })) };
 }
 export function localDate(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
